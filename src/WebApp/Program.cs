@@ -1,5 +1,9 @@
 ﻿using eShop.WebApp.Components;
 using eShop.ServiceDefaults;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using Prometheus;
+using System.Diagnostics.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,7 +13,18 @@ builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
 builder.AddApplicationServices();
 
+builder.Services.AddOpenTelemetry()
+    .WithMetrics(metrics =>
+    {
+        metrics.SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("BasketAPI"));
+        metrics.AddAspNetCoreInstrumentation(); 
+        metrics.AddRuntimeInstrumentation();    
+        metrics.AddPrometheusExporter();
+    });
+
 var app = builder.Build();
+
+app.UseOpenTelemetryPrometheusScrapingEndpoint();
 
 app.MapDefaultEndpoints();
 
@@ -26,6 +41,7 @@ app.UseAntiforgery();
 app.UseHttpsRedirection();
 
 app.UseStaticFiles();
+
 
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
