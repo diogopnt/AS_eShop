@@ -6,7 +6,7 @@ using eShop.Basket.API.Model;
 using OpenTelemetry.Trace;
 using GrpcStatus = Grpc.Core.Status;
 using GrpcStatusCode = Grpc.Core.StatusCode;
-
+using Prometheus;
 
 namespace eShop.Basket.API.Grpc;
 
