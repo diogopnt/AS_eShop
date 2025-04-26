@@ -48,17 +48,17 @@ public class BasketService(
 
     public override async Task<CustomerBasketResponse> UpdateBasket(UpdateBasketRequest request, ServerCallContext context)
     {
-        Console.WriteLine("🔹 Starting UpdateBasket activity..."); // <-- Teste para ver se o método é chamado
+        Console.WriteLine("🔹 Starting UpdateBasket activity..."); 
 
         using var activity = ActivitySource.StartActivity("UpdateBasket")?.SetTag("basket.operation", "update");
 
         if (activity == null)
         {
-            Console.WriteLine("❌ Activity not created!"); // <-- Se isto aparecer, o OpenTelemetry não está a capturar spans
+            Console.WriteLine("❌ Activity not created!"); 
         }
         else
         {
-            Console.WriteLine("✅ Activity created successfully!"); // <-- Confirma que o span foi criado
+            Console.WriteLine("✅ Activity created successfully!"); 
         }
 
         var userId = context.GetUserIdentity();

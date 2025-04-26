@@ -21,7 +21,7 @@ builder.Services.AddOpenTelemetry()
         metrics.AddAspNetCoreInstrumentation();
         metrics.AddRuntimeInstrumentation();
         metrics.AddPrometheusExporter();
-        metrics.AddMeter("BasketAPI.Metrics"); 
+        metrics.AddMeter("BasketAPI.Metrics");
     });
 
 builder.Services.AddSingleton<BasketService>();
