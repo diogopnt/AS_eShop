@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using eShop.WebAppComponents.Catalog;
 using eShop.WebAppComponents.Services;
+using System.Diagnostics.Metrics;
 
 namespace eShop.WebApp.Services;
 
@@ -10,8 +11,12 @@ public class BasketState(
     BasketService basketService,
     CatalogService catalogService,
     OrderingService orderingService,
-    AuthenticationStateProvider authenticationStateProvider) : IBasketState
+    AuthenticationStateProvider authenticationStateProvider,
+    Meter meter) : IBasketState
 {
+    private readonly Counter<double> _totalSales = meter.CreateCounter<double>(
+        "order_total_sales", "EUR", "Total sales in EUR");
+
     private Task<IReadOnlyCollection<BasketItem>>? _cachedBasket;
     private HashSet<BasketStateChangedSubscription> _changeSubscriptions = new();
 
@@ -87,6 +92,7 @@ public class BasketState(
 
         // Get details for the items in the basket
         var orderItems = await FetchBasketItemsAsync();
+        var totalOrderValue = orderItems.Sum(item => item.UnitPrice * item.Quantity);
 
         // Call into Ordering.API to create the order using those details
         var request = new CreateOrderRequest(
@@ -104,7 +110,11 @@ public class BasketState(
             CardTypeId: checkoutInfo.CardTypeId,
             Buyer: buyerId,
             Items: [.. orderItems]);
+        
         await orderingService.CreateOrder(request, checkoutInfo.RequestId);
+
+        _totalSales.Add((double)totalOrderValue);
+
         await DeleteBasketAsync();
     }
 
@@ -126,10 +136,10 @@ public class BasketState(
                 return [];
             }
 
-            // Get details for the items in the basket
             var basketItems = new List<BasketItem>();
             var productIds = quantities.Select(row => row.ProductId);
             var catalogItems = (await catalogService.GetCatalogItems(productIds)).ToDictionary(k => k.Id, v => v);
+
             foreach (var item in quantities)
             {
                 var catalogItem = catalogItems[item.ProductId];
