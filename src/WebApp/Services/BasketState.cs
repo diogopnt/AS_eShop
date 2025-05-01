@@ -17,6 +17,15 @@ public class BasketState(
     private readonly Counter<double> _totalSales = meter.CreateCounter<double>(
         "order_total_sales", "EUR", "Total sales in EUR");
 
+    private readonly Counter<double> _potentialSales = meter.CreateCounter<double>(
+        "basket_total_potential_value", "EUR", "Sum of potential basket value");    
+
+    private readonly Counter<double> _checkoutsCompleted = meter.CreateCounter<double>(
+        "basket_checkouts_total", "Total number of successful basket checkouts");
+
+    private readonly Counter<long> _usersWithAdditions = meter.CreateCounter<long>(
+        "basket_additions_total", "Total users who added items to the basket");
+
     private Task<IReadOnlyCollection<BasketItem>>? _cachedBasket;
     private HashSet<BasketStateChangedSubscription> _changeSubscriptions = new();
 
@@ -38,6 +47,12 @@ public class BasketState(
     public async Task AddAsync(CatalogItem item)
     {
         var items = (await FetchBasketItemsAsync()).Select(i => new BasketQuantity(i.ProductId, i.Quantity)).ToList();
+
+        var hasAddedBefore = (await GetBasketItemsAsync()).Any();
+        if (!hasAddedBefore){
+            _usersWithAdditions.Add(1);
+        }
+
         bool found = false;
         for (var i = 0; i < items.Count; i++)
         {
@@ -53,6 +68,10 @@ public class BasketState(
         if (!found)
         {
             items.Add(new BasketQuantity(item.Id, 1));
+            _potentialSales.Add((double)item.Price);
+        }else
+        {
+            _potentialSales.Add((double)item.Price); // For the potential sale metric, not a real one
         }
 
         _cachedBasket = null;
@@ -114,6 +133,7 @@ public class BasketState(
         await orderingService.CreateOrder(request, checkoutInfo.RequestId);
 
         _totalSales.Add((double)totalOrderValue);
+        _checkoutsCompleted.Add(1);
 
         await DeleteBasketAsync();
     }
