@@ -1,23 +1,49 @@
 ﻿using System.Net.Http.Json;
 using System.Web;
 using eShop.WebAppComponents.Catalog;
+using System.Diagnostics.Metrics;
 
 namespace eShop.WebAppComponents.Services;
 
-public class CatalogService(HttpClient httpClient) : ICatalogService
+public class CatalogService(HttpClient httpClient, Meter meter) : ICatalogService
 {
     private readonly string remoteServiceBaseUrl = "api/catalog/";
+    private readonly Counter<int> _productViews = meter.CreateCounter<int>(
+        "catalog_product_views_total", "Total number of product views");
+    private readonly Counter<int> _catalogFilteredSearches = meter.CreateCounter<int>(
+        "catalog_filtered_searches_total", "Total number of filtered catalog searches");
+    private readonly Counter<int> _catalogPageViews = meter.CreateCounter<int>(
+        "catalog_page_views_total", "Total number of catalog page views");
 
-    public Task<CatalogItem?> GetCatalogItem(int id)
+
+    public async Task<CatalogItem?> GetCatalogItem(int id)
     {
         var uri = $"{remoteServiceBaseUrl}items/{id}";
-        return httpClient.GetFromJsonAsync<CatalogItem>(uri);
+        var item = await httpClient.GetFromJsonAsync<CatalogItem>(uri);
+
+        if (item != null)
+        {
+            _productViews.Add(1, KeyValuePair.Create<string, object?>("product_id", item.Id));
+        }
+
+        return item;
     }
 
     public async Task<CatalogResult> GetCatalogItems(int pageIndex, int pageSize, int? brand, int? type)
     {
         var uri = GetAllCatalogItemsUri(remoteServiceBaseUrl, pageIndex, pageSize, brand, type);
         var result = await httpClient.GetFromJsonAsync<CatalogResult>(uri);
+
+        var tags = new[]
+        {
+            KeyValuePair.Create<string, object?>("brand", brand?.ToString() ?? "none"),
+            KeyValuePair.Create<string, object?>("type", type?.ToString() ?? "none"),
+        };
+
+        _catalogFilteredSearches.Add(1, tags);
+
+        _catalogPageViews.Add(1, KeyValuePair.Create<string, object?>("page", pageIndex));
+
         return result!;
     }
 
