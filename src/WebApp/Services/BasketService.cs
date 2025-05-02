@@ -15,19 +15,31 @@ public class BasketService
     private readonly Counter<int> _itemsAddedCounter;
     private readonly Counter<int> _itemsRemovedCounter;
     private readonly Histogram<double> _timeBetweenAddAndRemove;
-
+    private readonly Counter<int> _abandonedCarts;
+    private readonly TimeSpan _abandonmentThreshold = TimeSpan.FromMinutes(30);
     private static readonly Dictionary<int, DateTime> _cartActivity = new();
+    private static readonly Dictionary<string, DateTime> _userLastBasketUpdate = new();
+    private static readonly HashSet<string> _checkoutsCompleted = new();
+    private static Timer? _abandonmentCheckTimer;
+
 
     public BasketService(GrpcBasketClient basketClient, Meter meter)
     {
         _basketClient = basketClient;
 
+        // API Metrics
         _totalRequests = meter.CreateCounter<int>("basket_api_requests_total");
         _requestDuration = meter.CreateHistogram<double>("basket_api_request_duration_seconds");
 
+        // Basket Metrics
         _itemsAddedCounter = meter.CreateCounter<int>("basket_items_added_total");
         _itemsRemovedCounter = meter.CreateCounter<int>("basket_items_removed_total");
         _timeBetweenAddAndRemove = meter.CreateHistogram<double>("basket_item_lifetime_seconds");
+
+        // Checkout Metrics
+        _abandonedCarts = meter.CreateCounter<int>("basket_abandoned_total", "Total abandoned carts");
+
+        _abandonmentCheckTimer = new Timer(CheckAbandonedCarts, null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
     }
 
     public async Task HandleRequest(HttpContext context, Func<Task> next)
@@ -65,8 +77,10 @@ public class BasketService
         _requestDuration.Record(timer.Elapsed.TotalSeconds);
     }
 
-    public async Task UpdateBasketAsync(IReadOnlyCollection<BasketQuantity> basket)
+    public async Task UpdateBasketAsync(string userId, IReadOnlyCollection<BasketQuantity> basket)
     {
+        _userLastBasketUpdate[userId] = DateTime.UtcNow;
+
         _totalRequests.Add(1);
         var timer = Stopwatch.StartNew();
 
@@ -181,6 +195,29 @@ public class BasketService
 
         return result;
     }
+
+    private void CheckAbandonedCarts(object? state)
+    {
+        var now = DateTime.UtcNow;
+
+        var abandonedUsers = _userLastBasketUpdate
+            .Where(kv => !_checkoutsCompleted.Contains(kv.Key) && now - kv.Value > _abandonmentThreshold)
+            .Select(kv => kv.Key)
+            .ToList();
+
+        foreach (var userId in abandonedUsers)
+        {
+            _abandonedCarts.Add(1);
+            _userLastBasketUpdate.Remove(userId);
+        }
+    }
+
+    public static void MarkCheckoutCompleted(string userId)
+    {
+        _checkoutsCompleted.Add(userId);
+    }
+
+
 }
 
 public record BasketQuantity(int ProductId, int Quantity);

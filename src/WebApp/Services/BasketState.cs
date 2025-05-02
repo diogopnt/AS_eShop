@@ -14,11 +14,12 @@ public class BasketState(
     AuthenticationStateProvider authenticationStateProvider,
     Meter meter) : IBasketState
 {
+    // Checkout Metrics
     private readonly Counter<double> _totalSales = meter.CreateCounter<double>(
         "order_total_sales", "EUR", "Total sales in EUR");
 
     private readonly Counter<double> _potentialSales = meter.CreateCounter<double>(
-        "basket_total_potential_value", "EUR", "Sum of potential basket value");    
+        "basket_total_potential_value", "EUR", "Sum of potential basket value");
 
     private readonly Counter<double> _checkoutsCompleted = meter.CreateCounter<double>(
         "basket_checkouts_total", "Total number of successful basket checkouts");
@@ -49,7 +50,8 @@ public class BasketState(
         var items = (await FetchBasketItemsAsync()).Select(i => new BasketQuantity(i.ProductId, i.Quantity)).ToList();
 
         var hasAddedBefore = (await GetBasketItemsAsync()).Any();
-        if (!hasAddedBefore){
+        if (!hasAddedBefore)
+        {
             _usersWithAdditions.Add(1);
         }
 
@@ -69,13 +71,18 @@ public class BasketState(
         {
             items.Add(new BasketQuantity(item.Id, 1));
             _potentialSales.Add((double)item.Price);
-        }else
+        }
+        else
         {
             _potentialSales.Add((double)item.Price); // For the potential sale metric, not a real one
         }
 
         _cachedBasket = null;
-        await basketService.UpdateBasketAsync(items);
+        var user = await GetUserAsync();
+        var userId = user.Identity?.Name ?? throw new InvalidOperationException("User not authenticated");
+
+        await basketService.UpdateBasketAsync(userId, items);
+
         await NotifyChangeSubscribersAsync();
     }
 
@@ -94,7 +101,11 @@ public class BasketState(
             }
 
             _cachedBasket = null;
-            await basketService.UpdateBasketAsync(existingItems.Select(i => new BasketQuantity(i.ProductId, i.Quantity)).ToList());
+
+            var user = await GetUserAsync();
+            var userId = user.Identity?.Name ?? throw new InvalidOperationException("User not authenticated");
+
+            await basketService.UpdateBasketAsync(userId, existingItems.Select(i => new BasketQuantity(i.ProductId, i.Quantity)).ToList());
             await NotifyChangeSubscribersAsync();
         }
     }
@@ -129,11 +140,13 @@ public class BasketState(
             CardTypeId: checkoutInfo.CardTypeId,
             Buyer: buyerId,
             Items: [.. orderItems]);
-        
+
         await orderingService.CreateOrder(request, checkoutInfo.RequestId);
 
         _totalSales.Add((double)totalOrderValue);
         _checkoutsCompleted.Add(1);
+
+        BasketService.MarkCheckoutCompleted(buyerId);
 
         await DeleteBasketAsync();
     }
