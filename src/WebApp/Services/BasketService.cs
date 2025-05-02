@@ -28,16 +28,16 @@ public class BasketService
         _basketClient = basketClient;
 
         // API Metrics
-        _totalRequests = meter.CreateCounter<int>("basket_api_requests_total");
-        _requestDuration = meter.CreateHistogram<double>("basket_api_request_duration_seconds");
+        _totalRequests = meter.CreateCounter<int>("basket_api_requests_total"); // Total number of API requests
+        _requestDuration = meter.CreateHistogram<double>("basket_api_request_duration_seconds"); // Duration of API requests
 
         // Basket Metrics
-        _itemsAddedCounter = meter.CreateCounter<int>("basket_items_added_total");
-        _itemsRemovedCounter = meter.CreateCounter<int>("basket_items_removed_total");
-        _timeBetweenAddAndRemove = meter.CreateHistogram<double>("basket_item_lifetime_seconds");
+        _itemsAddedCounter = meter.CreateCounter<int>("basket_items_added_total"); // Total number of items added to the basket
+        _itemsRemovedCounter = meter.CreateCounter<int>("basket_items_removed_total"); // Total number of items removed from the basket
+        _timeBetweenAddAndRemove = meter.CreateHistogram<double>("basket_item_lifetime_seconds"); // Time between item added and removed
 
         // Checkout Metrics
-        _abandonedCarts = meter.CreateCounter<int>("basket_abandoned_total", "Total abandoned carts");
+        _abandonedCarts = meter.CreateCounter<int>("basket_abandoned_total"); // Total number of abandoned carts
 
         _abandonmentCheckTimer = new Timer(CheckAbandonedCarts, null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
     }

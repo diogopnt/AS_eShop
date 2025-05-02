@@ -23,9 +23,9 @@ public class CatalogService : ICatalogService
         this.httpClient = httpClient;
         this.meter = meter;
 
-        _productViews = meter.CreateCounter<int>("catalog_product_views_total", "Total number of product views");
-        _catalogFilteredSearches = meter.CreateCounter<int>("catalog_filtered_searches_total", "Total number of filtered catalog searches");
-        _catalogPageViews = meter.CreateCounter<int>("catalog_page_views_total", "Total number of catalog page views");
+        _productViews = meter.CreateCounter<int>("catalog_product_views_total"); // Total product views
+        _catalogFilteredSearches = meter.CreateCounter<int>("catalog_filtered_searches_total"); // Total filtered searches
+        _catalogPageViews = meter.CreateCounter<int>("catalog_page_views_total"); // Total catalog page views
     }
 
     private async Task EnsureNamesAreLoadedAsync()

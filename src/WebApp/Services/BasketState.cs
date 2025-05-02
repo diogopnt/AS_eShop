@@ -16,16 +16,16 @@ public class BasketState(
 {
     // Checkout Metrics
     private readonly Counter<double> _totalSales = meter.CreateCounter<double>(
-        "order_total_sales", "EUR", "Total sales in EUR");
+        "order_total_sales"); // Total sales value of completed checkouts
 
     private readonly Counter<double> _potentialSales = meter.CreateCounter<double>(
-        "basket_total_potential_value", "EUR", "Sum of potential basket value");
+        "basket_total_potential_value"); // Potential sales value of items in the basket
 
     private readonly Counter<double> _checkoutsCompleted = meter.CreateCounter<double>(
-        "basket_checkouts_total", "Total number of successful basket checkouts");
+        "basket_checkouts_total"); // Total number of successful checkouts
 
     private readonly Counter<long> _usersWithAdditions = meter.CreateCounter<long>(
-        "basket_additions_total", "Total users who added items to the basket");
+        "basket_additions_total"); // Total number of users who added items to the basket
 
     private Task<IReadOnlyCollection<BasketItem>>? _cachedBasket;
     private HashSet<BasketStateChangedSubscription> _changeSubscriptions = new();
