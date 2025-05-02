@@ -5,16 +5,45 @@ using System.Diagnostics.Metrics;
 
 namespace eShop.WebAppComponents.Services;
 
-public class CatalogService(HttpClient httpClient, Meter meter) : ICatalogService
+public class CatalogService : ICatalogService
 {
-    private readonly string remoteServiceBaseUrl = "api/catalog/";
-    private readonly Counter<int> _productViews = meter.CreateCounter<int>(
-        "catalog_product_views_total", "Total number of product views");
-    private readonly Counter<int> _catalogFilteredSearches = meter.CreateCounter<int>(
-        "catalog_filtered_searches_total", "Total number of filtered catalog searches");
-    private readonly Counter<int> _catalogPageViews = meter.CreateCounter<int>(
-        "catalog_page_views_total", "Total number of catalog page views");
+    private readonly HttpClient httpClient;
+    private readonly Meter meter;
 
+    private readonly string remoteServiceBaseUrl = "api/catalog/";
+    private readonly Counter<int> _productViews;
+    private readonly Counter<int> _catalogFilteredSearches;
+    private readonly Counter<int> _catalogPageViews;
+
+    private Dictionary<int, string>? _brandNames;
+    private Dictionary<int, string>? _typeNames;
+
+    public CatalogService(HttpClient httpClient, Meter meter)
+    {
+        this.httpClient = httpClient;
+        this.meter = meter;
+
+        _productViews = meter.CreateCounter<int>("catalog_product_views_total", "Total number of product views");
+        _catalogFilteredSearches = meter.CreateCounter<int>("catalog_filtered_searches_total", "Total number of filtered catalog searches");
+        _catalogPageViews = meter.CreateCounter<int>("catalog_page_views_total", "Total number of catalog page views");
+    }
+
+    private async Task EnsureNamesAreLoadedAsync()
+    {
+        if (_brandNames == null || _typeNames == null)
+        {
+            _brandNames = new Dictionary<int, string>();
+            _typeNames = new Dictionary<int, string>();
+
+            var brands = await GetBrands();
+            foreach (var b in brands)
+                _brandNames[b.Id] = b.Brand;
+
+            var types = await GetTypes();
+            foreach (var t in types)
+                _typeNames[t.Id] = t.Type;
+        }
+    }
 
     public async Task<CatalogItem?> GetCatalogItem(int id)
     {
@@ -31,17 +60,21 @@ public class CatalogService(HttpClient httpClient, Meter meter) : ICatalogServic
 
     public async Task<CatalogResult> GetCatalogItems(int pageIndex, int pageSize, int? brand, int? type)
     {
+        await EnsureNamesAreLoadedAsync();
+
         var uri = GetAllCatalogItemsUri(remoteServiceBaseUrl, pageIndex, pageSize, brand, type);
         var result = await httpClient.GetFromJsonAsync<CatalogResult>(uri);
 
+        var brandLabel = brand.HasValue && _brandNames!.TryGetValue(brand.Value, out var bName) ? bName : "none";
+        var typeLabel = type.HasValue && _typeNames!.TryGetValue(type.Value, out var tName) ? tName : "none";
+
         var tags = new[]
         {
-            KeyValuePair.Create<string, object?>("brand", brand?.ToString() ?? "none"),
-            KeyValuePair.Create<string, object?>("type", type?.ToString() ?? "none"),
+            KeyValuePair.Create<string, object?>("brand", brandLabel),
+            KeyValuePair.Create<string, object?>("type", typeLabel),
         };
 
         _catalogFilteredSearches.Add(1, tags);
-
         _catalogPageViews.Add(1, KeyValuePair.Create<string, object?>("page", pageIndex));
 
         return result!;
