@@ -7,6 +7,8 @@ using OpenTelemetry.Trace;
 using GrpcStatus = Grpc.Core.Status;
 using GrpcStatusCode = Grpc.Core.StatusCode;
 using Prometheus;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace eShop.Basket.API.Grpc;
 
@@ -15,6 +17,13 @@ public class BasketService(
     ILogger<BasketService> logger) : Basket.BasketBase
 {
     private static readonly ActivitySource ActivitySource = new("BasketAPI");
+
+    private static string HashUserId(string userId)
+    {
+        using var sha = SHA256.Create();
+        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(userId));
+        return Convert.ToBase64String(bytes).Substring(0, 10);
+    }
 
     [AllowAnonymous]
     public override async Task<CustomerBasketResponse> GetBasket(GetBasketRequest request, ServerCallContext context)
@@ -25,6 +34,7 @@ public class BasketService(
         activity?.AddEvent(new ActivityEvent("Start processing GetBasket request"));
 
         var userId = context.GetUserIdentity();
+        var hashedUserId = HashUserId(userId);
         if (string.IsNullOrEmpty(userId))
         {
             activity?.SetTag("basket.user_id", "anonymous");
@@ -33,11 +43,11 @@ public class BasketService(
             return new();
         }
 
-        activity?.SetTag("basket.user_id", userId);
+        activity?.SetTag("basket.user_id", hashedUserId); 
 
         if (logger.IsEnabled(LogLevel.Debug))
         {
-            logger.LogDebug("Begin GetBasket call from method {Method} for basket id {Id}", context.Method, userId);
+            logger.LogDebug("Begin GetBasket call from method {Method} for basket id {Id}", context.Method, hashedUserId); 
         }
 
         // Log the request details
@@ -71,6 +81,7 @@ public class BasketService(
         activity?.AddEvent(new ActivityEvent("Start UpdateBasket request"));
 
         var userId = context.GetUserIdentity();
+        var hashedUserId = HashUserId(userId);
         if (string.IsNullOrEmpty(userId))
         {
             activity?.SetTag("basket.user_id", "anonymous");
@@ -79,7 +90,7 @@ public class BasketService(
             ThrowNotAuthenticated();
         }
 
-        activity?.SetTag("basket.user_id", userId);
+        activity?.SetTag("basket.user_id", hashedUserId);
         activity?.SetTag("basket.item_count", request.Items.Count);
 
         foreach (var item in request.Items)
@@ -129,6 +140,7 @@ public class BasketService(
         activity?.AddEvent(new ActivityEvent("Start DeleteBasket request"));
 
         var userId = context.GetUserIdentity();
+        var hashedUserId = HashUserId(userId);
         if (string.IsNullOrEmpty(userId))
         {
             activity?.SetTag("basket.user_id", "anonymous");
@@ -137,7 +149,7 @@ public class BasketService(
             ThrowNotAuthenticated();
         }
 
-        activity?.SetTag("basket.user_id", userId);
+        activity?.SetTag("basket.user_id", hashedUserId);
 
         // Log the request details
         using (var repoSpan = ActivitySource.StartActivity("repository.DeleteBasketAsync", ActivityKind.Internal))
