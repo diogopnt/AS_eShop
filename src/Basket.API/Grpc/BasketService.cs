@@ -19,12 +19,17 @@ public class BasketService(
     [AllowAnonymous]
     public override async Task<CustomerBasketResponse> GetBasket(GetBasketRequest request, ServerCallContext context)
     {
-        using var activity = ActivitySource.StartActivity("GetBasket")?.SetTag("basket.operation", "retrieve");
+        using var activity = ActivitySource.StartActivity("GetBasket", ActivityKind.Server)?
+            .SetTag("basket.operation", "retrieve");
+
+        activity?.AddEvent(new ActivityEvent("Start processing GetBasket request"));
 
         var userId = context.GetUserIdentity();
         if (string.IsNullOrEmpty(userId))
         {
             activity?.SetTag("basket.user_id", "anonymous");
+            activity?.SetStatus(ActivityStatusCode.Ok, "No user ID provided");
+            activity?.AddEvent(new ActivityEvent("Anonymous user"));
             return new();
         }
 
@@ -35,37 +40,42 @@ public class BasketService(
             logger.LogDebug("Begin GetBasket call from method {Method} for basket id {Id}", context.Method, userId);
         }
 
-        var data = await repository.GetBasketAsync(userId);
-
-        if (data is not null)
+        // Log the request details
+        using (var repoSpan = ActivitySource.StartActivity("repository.GetBasketAsync", ActivityKind.Internal))
         {
-            activity?.SetTag("basket.item_count", data.Items.Count);
-            return MapToCustomerBasketResponse(data);
-        }
+            repoSpan?.SetTag("repository.call", "GetBasketAsync");
+            repoSpan?.AddEvent(new ActivityEvent("Fetching basket from DB"));
 
-        return new();
+            var data = await repository.GetBasketAsync(userId);
+
+            if (data is not null)
+            {
+                activity?.SetTag("basket.item_count", data.Items.Count);
+                activity?.AddEvent(new ActivityEvent("Basket retrieved with items"));
+                activity?.SetStatus(ActivityStatusCode.Ok);
+                return MapToCustomerBasketResponse(data);
+            }
+
+            activity?.AddEvent(new ActivityEvent("No basket found for user"));
+            activity?.SetStatus(ActivityStatusCode.Ok, "Empty basket");
+            return new();
+        }
     }
+
 
     public override async Task<CustomerBasketResponse> UpdateBasket(UpdateBasketRequest request, ServerCallContext context)
     {
-        Console.WriteLine("🔹 Starting UpdateBasket activity..."); 
+        using var activity = ActivitySource.StartActivity("UpdateBasket", ActivityKind.Server)?
+            .SetTag("basket.operation", "update");
 
-        using var activity = ActivitySource.StartActivity("UpdateBasket")?.SetTag("basket.operation", "update");
-
-        if (activity == null)
-        {
-            Console.WriteLine("❌ Activity not created!"); 
-        }
-        else
-        {
-            Console.WriteLine("✅ Activity created successfully!"); 
-        }
+        activity?.AddEvent(new ActivityEvent("Start UpdateBasket request"));
 
         var userId = context.GetUserIdentity();
         if (string.IsNullOrEmpty(userId))
         {
             activity?.SetTag("basket.user_id", "anonymous");
-            Console.WriteLine("❌ User not authenticated!");
+            activity?.SetStatus(ActivityStatusCode.Error, "User not authenticated");
+            activity?.AddEvent(new ActivityEvent("Missing user ID"));
             ThrowNotAuthenticated();
         }
 
@@ -74,46 +84,76 @@ public class BasketService(
 
         foreach (var item in request.Items)
         {
-            activity?.SetTag($"basket.item.{item.ProductId}", item.Quantity);
-            Console.WriteLine($"📦 Item: {item.ProductId} - Quantity: {item.Quantity}");
+            activity?.SetTag($"basket.item.{item.ProductId}.quantity", item.Quantity);
+            activity?.AddEvent(new ActivityEvent($"Item added: {item.ProductId}, Quantity: {item.Quantity}"));
         }
 
-        Console.WriteLine("🔹 Sending span...");
-
-        if (logger.IsEnabled(LogLevel.Debug))
+        // Log the request details
+        CustomerBasket customerBasket;
+        using (var mapSpan = ActivitySource.StartActivity("MapToCustomerBasket", ActivityKind.Internal))
         {
-            logger.LogDebug("Updating basket for user {UserId} with {ItemCount} items", userId, request.Items.Count);
+            customerBasket = MapToCustomerBasket(userId, request);
+            mapSpan?.AddEvent(new ActivityEvent("Basket object created from request"));
         }
 
-        var customerBasket = MapToCustomerBasket(userId, request);
-        var response = await repository.UpdateBasketAsync(customerBasket);
-        if (response is null)
+        // Log the request details
+        CustomerBasket updatedBasket;
+        using (var repoSpan = ActivitySource.StartActivity("repository.UpdateBasketAsync", ActivityKind.Internal))
         {
-            ThrowBasketDoesNotExist(userId);
+            updatedBasket = await repository.UpdateBasketAsync(customerBasket);
+            repoSpan?.SetTag("repository.call", "UpdateBasketAsync");
+
+            if (updatedBasket == null)
+            {
+                repoSpan?.SetStatus(ActivityStatusCode.Error, "Basket not found");
+                activity?.SetStatus(ActivityStatusCode.Error, "Basket not found during update");
+                activity?.AddEvent(new ActivityEvent("Basket update failed - not found"));
+                ThrowBasketDoesNotExist(userId);
+            }
+
+            repoSpan?.AddEvent(new ActivityEvent("Basket updated in DB"));
         }
 
         activity?.SetStatus(ActivityStatusCode.Ok);
-        activity?.Dispose();
+        activity?.AddEvent(new ActivityEvent("UpdateBasket completed successfully"));
 
-        return MapToCustomerBasketResponse(response);
+        return MapToCustomerBasketResponse(updatedBasket);
     }
+
 
     public override async Task<DeleteBasketResponse> DeleteBasket(DeleteBasketRequest request, ServerCallContext context)
     {
-        using var activity = ActivitySource.StartActivity("DeleteBasket")?.SetTag("basket.operation", "delete");
+        using var activity = ActivitySource.StartActivity("DeleteBasket", ActivityKind.Server)?
+            .SetTag("basket.operation", "delete");
+
+        activity?.AddEvent(new ActivityEvent("Start DeleteBasket request"));
 
         var userId = context.GetUserIdentity();
         if (string.IsNullOrEmpty(userId))
         {
             activity?.SetTag("basket.user_id", "anonymous");
+            activity?.SetStatus(ActivityStatusCode.Error, "Unauthenticated user");
+            activity?.AddEvent(new ActivityEvent("Missing user ID"));
             ThrowNotAuthenticated();
         }
 
         activity?.SetTag("basket.user_id", userId);
 
-        await repository.DeleteBasketAsync(userId);
-        return new();
+        // Log the request details
+        using (var repoSpan = ActivitySource.StartActivity("repository.DeleteBasketAsync", ActivityKind.Internal))
+        {
+            repoSpan?.SetTag("repository.call", "DeleteBasketAsync");
+            repoSpan?.AddEvent(new ActivityEvent("Deleting basket from DB"));
+
+            await repository.DeleteBasketAsync(userId);
+        }
+
+        activity?.AddEvent(new ActivityEvent("Basket deleted"));
+        activity?.SetStatus(ActivityStatusCode.Ok);
+
+        return new DeleteBasketResponse();
     }
+
 
     [DoesNotReturn]
     private static void ThrowNotAuthenticated() =>
