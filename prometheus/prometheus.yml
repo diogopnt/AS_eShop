@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'eShop'
+    scheme: https  
+    tls_config:    
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['host.docker.internal:7298'] # host.docker.internal:7298
+    metrics_path: '/metrics'
+
+  #- job_name: 'BasketAPI' 
+   # scheme: http  
+    #static_configs:
+     # - targets: ['host.docker.internal:9090'] 
+    #metrics_path: '/metrics'

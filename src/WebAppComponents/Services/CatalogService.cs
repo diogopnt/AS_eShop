@@ -65,8 +65,8 @@ public class CatalogService : ICatalogService
         var uri = GetAllCatalogItemsUri(remoteServiceBaseUrl, pageIndex, pageSize, brand, type);
         var result = await httpClient.GetFromJsonAsync<CatalogResult>(uri);
 
-        var brandLabel = brand.HasValue && _brandNames!.TryGetValue(brand.Value, out var bName) ? bName : "none";
-        var typeLabel = type.HasValue && _typeNames!.TryGetValue(type.Value, out var tName) ? tName : "none";
+        var brandLabel = brand.HasValue && _brandNames!.TryGetValue(brand.Value, out var bName) ? bName : "All";
+        var typeLabel = type.HasValue && _typeNames!.TryGetValue(type.Value, out var tName) ? tName : "All";
 
         var tags = new[]
         {

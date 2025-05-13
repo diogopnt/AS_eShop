@@ -140,3 +140,31 @@ The sample catalog data is defined in [catalog.json](https://github.com/dotnet/e
 ## eShop on Azure
 
 For a version of this app configured for deployment on Azure, please view [the eShop on Azure](https://github.com/Azure-Samples/eShopOnAzure) repo.
+
+## Observability
+
+The eShop application supports observability through tools like Prometheus, Grafana, and Jaeger. To set up a local monitoring environment, use the following commands.
+
+### Prometheus
+
+``` bash
+docker run -d --rm -v C:/prometheus.yml:/prometheus/prometheus.yml -p 9090:9090 prom/prometheus --enable-feature=otlp-write-receive
+
+```
+Note: Ensure that the prometheus.yml file is correctly configured and available at the specified path.
+
+### Grafana
+
+``` bash
+docker run -d --name grafana -p 3000:3000 grafana/grafana
+```
+Access Grafana at http://localhost:3000.
+
+### Jaeger 
+
+``` bash
+docker run --rm -d --name jaeger -e COLLECTOR_ZIPKIN_HOST_PORT=:9411 -p 65209:16686 -p 4317:4317 -p 4318:4318 -p 9411:9411 jaegertracing/all-in-one:latest
+```
+Access Jaeger at http://localhost:16686 (or the adjusted port).
+
+Make sure Docker is running before starting the application to ensure observability components work properly.
